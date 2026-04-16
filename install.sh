@@ -165,7 +165,7 @@ if [ -x "$BIN/trace_haplotypes" ] && \
     echo "OK: trace_haplotypes up to date"
 else
     echo "Building trace_haplotypes..."
-    g++ -O3 -std=c++17 -fopenmp \
+    g++ -O2 -std=c++17 -fopenmp \
         -I"$BIN/gbwtgraph/include" \
         -I"$BIN/gbwt/include" \
         -I"$BIN/sdsl-lite/include" \
@@ -182,6 +182,36 @@ else
     echo "OK: trace_haplotypes built"
 fi
 
+# ── 8. centrolign ─────────────────────────────────────────────────────────────
+echo ""
+echo "--- centrolign ---"
+if [ -x "$BIN/centrolign" ]; then
+    echo "OK: centrolign already present at bin/centrolign"
+else
+    echo "Building centrolign from source..."
+    if [ ! -d "$BIN/centrolign-src" ]; then
+        git clone --recurse-submodules \
+            https://github.com/jeizenga/centrolign "$BIN/centrolign-src"
+    fi
+    cmake -S "$BIN/centrolign-src" \
+          -B "$BIN/centrolign-src/build" \
+          -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$BIN/centrolign-src/build" --parallel "$(nproc)"
+    cp "$BIN/centrolign-src/build/centrolign" "$BIN/centrolign"
+    echo "OK: centrolign built"
+fi
+
+# ── 9. Python dependencies ────────────────────────────────────────────────────
+echo ""
+echo "--- Python dependencies (scikit-bio) ---"
+if python3 -c "import skbio" &>/dev/null 2>&1; then
+    echo "OK: scikit-bio already installed"
+else
+    echo "Installing scikit-bio..."
+    pip install --user scikit-bio
+    echo "OK: scikit-bio installed"
+fi
+
 # ── done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== All done ==="
@@ -192,3 +222,4 @@ echo "  bin/gbz-base/target/release/gbz2db"
 echo "  bin/gbz-base/target/release/query"
 echo "  bin/filter_paths"
 echo "  bin/trace_haplotypes"
+echo "  bin/centrolign"

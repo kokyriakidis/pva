@@ -4,8 +4,8 @@
 
 # /home/kokyriakidis/Downloads/pangenome-vntr-alignments/bin/gbz-base/target/release/gbz2db \
 # /home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/hprc-v2.1-mc-chm13-eval.gbz \
-# --output /home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/hprc-v2.1-mc-chm13-eval.db
-#--overwrite
+# --output /home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/hprc-v2.1-mc-chm13-eval.db \
+# --overwrite
 
 
 # gbz-base repository at: https://github.com/jltsiren/gbz-base
@@ -25,20 +25,40 @@
 # > /home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/kolf2.1j-dg-sample-9380487-9380493.gfa
 
 
+# # Generate distance index
+# bin/vg index -j data/hprc-v2.1-mc-chm13-eval.dist data/hprc-v2.1-mc-chm13-eval.gbz
+
+# # Extract chains from distance index
+# bin/vg chains data/hprc-v2.1-mc-chm13-eval.gbz data/hprc-v2.1-mc-chm13-eval.dist \
+#   > data/hprc-v2.1-mc-chm13-eval.chains
+
+# # Rebuild DB with chains
+# bin/gbz-base/target/release/gbz2db \
+#   --chains data/hprc-v2.1-mc-chm13-eval.chains \
+#   --output data/hprc-v2.1-mc-chm13-eval.db \
+#   --overwrite \
+#   data/hprc-v2.1-mc-chm13-eval.gbz
+# Then --snarls in the query will work. The distance index step will be the slowest — it's a full index build over the whole pangenome.
+
+
 
 
 #!/usr/bin/env bash
 set -euo pipefail
 
-GBZ=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/hprc-v2.1-mc-chm13-eval.gbz
-DB=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/hprc-v2.1-mc-chm13-eval.db
-GFA=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/test_region.gfa
-SNARLS=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/test_region.snarls
-OUT=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/data/test_region_alleles.fa
+ROOT=/home/kokyriakidis/Downloads/pangenome-vntr-alignments
 
-VG=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/bin/vg
-QUERY=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/bin/gbz-base/target/release/query
-TRACE=/home/kokyriakidis/Downloads/pangenome-vntr-alignments/bin/trace_haplotypes
+GBZ=$ROOT/data/hprc-v2.1-mc-chm13-eval.gbz
+DB=$ROOT/data/hprc-v2.1-mc-chm13-eval.db
+GFA=$ROOT/data/test_region.gfa
+SNARLS=$ROOT/data/test_region.snarls
+OUT=$ROOT/data/test_region_alleles.fa
+TREE_DIR=$ROOT/data/guide_tree
+
+VG=$ROOT/bin/vg
+QUERY=$ROOT/bin/gbz-base/target/release/query
+TRACE=$ROOT/bin/trace_haplotypes
+GUIDE_TREE=$ROOT/guide_tree.sh
 
 # 1. Query by genomic interval → subgraph GFA
 "$QUERY" --sample CHM13 --contig chr1 --interval 1000000..1001000 "$DB" > "$GFA"
@@ -88,6 +108,16 @@ fi
 
 SEQ_COUNT=$(grep -c "^>" "$OUT" 2>/dev/null || echo 0)
 echo "Sequences extracted: $SEQ_COUNT"
+
+# 5. Build guide tree from all-vs-all pairwise centrolign alignments
+"$GUIDE_TREE" "$OUT" "$TREE_DIR"
+echo "Guide tree: $TREE_DIR/guide_tree.nwk"
+
+
+
+
+
+
 
 
 
