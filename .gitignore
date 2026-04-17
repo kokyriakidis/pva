@@ -1,0 +1,40 @@
+# ── Build outputs ─────────────────────────────────────────────────────────────
+bin/
+*.so
+*.a
+*.o
+
+# ── Data files ────────────────────────────────────────────────────────────────
+data/
+*.gbz
+*.gbwt
+*.db
+*.dist
+*.snarls
+*.gfa
+*.ri
+*.fa
+*.fasta
+*.bed
+*.nwk
+
+# ── Guide tree working directories ────────────────────────────────────────────
+guide_tree/
+split_fastas/
+pairwise_cigar/
+
+# ── SLURM logs and job outputs ────────────────────────────────────────────────
+logs/
+*.out
+*.err
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+.claude/
+analysis.sh
+generate_required_inputs.sh
+guide_tree.sh
+filter_paths.cpp
+trace_haplotypes.cpp
+Makefile
+__pycache__/
+*.pyc

@@ -5,18 +5,19 @@
 # Required --export variables:
 #   COMBINATIONS_FILE  — path to combinations.txt (path1 \t path2, one pair per line)
 #   OUTDIR             — root output directory (must contain pairwise_cigar/ and work/)
+#   CENTROLIGN_BIN     — path to centrolign binary (optional; defaults to repo bin/centrolign)
 #
 # Submit from $OUTDIR:
 #   sbatch --job-name=vntr_all_pairs \
-#          --array=[1-NPAIRS]%128 \
-#          --export=COMBINATIONS_FILE=...,OUTDIR=... \
+#          --array=[1-NPAIRS]%32 \
+#          --export=COMBINATIONS_FILE=...,OUTDIR=...,CENTROLIGN_BIN=... \
 #          /path/to/slurm/all_pairs.sh
 
 #SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --mem=56gb
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=32
 #SBATCH --output=logs/array_job_%A_task_%a.log
 #SBATCH --time=1:00:00
 
@@ -51,7 +52,7 @@ if [ -f "$OUT" ]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CENTROLIGN="$ROOT/bin/centrolign"
+CENTROLIGN="${CENTROLIGN_BIN:-$ROOT/bin/centrolign}"
 
 TEMP_FASTA="$WORKDIR/${SAMPLE1}_${SAMPLE2}.fa"
 cat "$FASTA1" "$FASTA2" > "$TEMP_FASTA"

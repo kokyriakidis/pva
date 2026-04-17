@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # install.sh
-# Sets up all tools and libraries needed for the pangenome VNTR alignment pipeline.
+# Installs/builds external dependencies, builds pva, and prepares tests for the
+# pangenome VNTR alignment pipeline.
 #
-# What this installs:
+# What this script installs/builds:
 #   bin/vg            - variation graph toolkit (prebuilt binary)
 #   bin/gbwt          - GBWT library (already cloned, built here)
 #   bin/sdsl-lite     - SDSL library (cloned and built here, required by gbwt)
 #   bin/gbwtgraph     - GBWTGraph library (cloned and built here)
 #   bin/gbz-base      - GBZ database tools (already cloned, built here via Cargo)
-#   bin/filter_paths  - path filtering tool (built from filter_paths.cpp)
-#   bin/trace_haplotypes - haplotype tracing tool (built from trace_haplotypes.cpp)
+#   bin/pva + bin/libpva.so - main CLI and shared library
+#   tests/unit/test_unit    - bundled unit test binary
 
 set -euo pipefail
 
@@ -145,47 +146,14 @@ else
     echo "OK: gbz-base built"
 fi
 
-# ── 6. filter_paths ──────────────────────────────────────────────────────────
-echo ""
-echo "--- filter_paths ---"
-if [ -x "$BIN/filter_paths" ] && \
-   [ "$ROOT/filter_paths.cpp" -ot "$BIN/filter_paths" ]; then
-    echo "OK: filter_paths up to date"
-else
-    echo "Building filter_paths..."
-    g++ -O3 -std=c++17 -o "$BIN/filter_paths" "$ROOT/filter_paths.cpp"
-    echo "OK: filter_paths built"
-fi
-
-# ── 7. trace_haplotypes ───────────────────────────────────────────────────────
-echo ""
-echo "--- trace_haplotypes ---"
-if [ -x "$BIN/trace_haplotypes" ] && \
-   [ "$ROOT/trace_haplotypes.cpp" -ot "$BIN/trace_haplotypes" ]; then
-    echo "OK: trace_haplotypes up to date"
-else
-    echo "Building trace_haplotypes..."
-    g++ -O2 -std=c++17 -fopenmp \
-        -I"$BIN/gbwtgraph/include" \
-        -I"$BIN/gbwt/include" \
-        -I"$BIN/sdsl-lite/include" \
-        -o "$BIN/trace_haplotypes" \
-        "$ROOT/trace_haplotypes.cpp" \
-        -L"$BIN/gbwtgraph/lib" \
-        -L"$BIN/gbwt/lib" \
-        -L"$BIN/sdsl-lite/lib" \
-        "$BIN/gbwtgraph/lib/libgbwtgraph.a" \
-        "$BIN/sdsl-lite/lib/libgbwt.a" \
-        "$BIN/sdsl-lite/lib/libhandlegraph.a" \
-        "$BIN/sdsl-lite/lib/libsdsl.a" \
-        -lcrypto -lzstd -lz -ldivsufsort -ldivsufsort64 -fopenmp
-    echo "OK: trace_haplotypes built"
-fi
-
-# ── 8. centrolign ─────────────────────────────────────────────────────────────
+# ── 6. centrolign ─────────────────────────────────────────────────────────────
 echo ""
 echo "--- centrolign ---"
-if [ -x "$BIN/centrolign" ]; then
+CENTROLIGN_BUILD="$BIN/centrolign-src/build"
+CENTROLIGN_INC="$BIN/centrolign-src/include"
+LIBCENTROLIGN="$CENTROLIGN_BUILD/libcentrolign.so"
+
+if [ -x "$BIN/centrolign" ] && [ -f "$LIBCENTROLIGN" ]; then
     echo "OK: centrolign already present at bin/centrolign"
 else
     echo "Building centrolign from source..."
@@ -194,23 +162,104 @@ else
             https://github.com/jeizenga/centrolign "$BIN/centrolign-src"
     fi
     cmake -S "$BIN/centrolign-src" \
-          -B "$BIN/centrolign-src/build" \
-          -DCMAKE_BUILD_TYPE=Release
-    cmake --build "$BIN/centrolign-src/build" --parallel "$(nproc)"
-    cp "$BIN/centrolign-src/build/centrolign" "$BIN/centrolign"
-    echo "OK: centrolign built"
+          -B "$CENTROLIGN_BUILD" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON
+    cmake --build "$CENTROLIGN_BUILD" --parallel "$(nproc)"
+    cp "$CENTROLIGN_BUILD/centrolign" "$BIN/centrolign"
+    echo "OK: centrolign built (binary + libcentrolign.so)"
 fi
 
-# ── 9. Python dependencies ────────────────────────────────────────────────────
+# ── 7. Python dependencies ────────────────────────────────────────────────────
 echo ""
 echo "--- Python dependencies (scikit-bio) ---"
 if python3 -c "import skbio" &>/dev/null 2>&1; then
     echo "OK: scikit-bio already installed"
 else
     echo "Installing scikit-bio..."
-    pip install --user scikit-bio
+    pip install --break-system-packages scikit-bio
     echo "OK: scikit-bio installed"
 fi
+
+# ── 8. pva (libpva.so + pva binary) ─────────────────────────────────────────
+echo ""
+echo "--- pva ---"
+
+# Sources compiled into libpva.so
+# pva_align.cpp requires centrolign headers + libcentrolign.so
+LIBPVA_SOURCES="$ROOT/pva_query.cpp $ROOT/pva_snarls.cpp $ROOT/pva_boundary.cpp $ROOT/pva_prep_guide_tree.cpp $ROOT/pva_snarls_dist_filter.cpp $ROOT/pva_infer_guide_tree.cpp $ROOT/pva_align.cpp"
+
+# pva_trace_haplotypes.cpp links against gbwtgraph static libs — compiled directly into binary
+PVA_HEADER="$ROOT/pva.h"
+LIBPVA="$BIN/libpva.so"
+PVA_BIN="$BIN/pva"
+
+# Rebuild if any source or header is newer than the target
+needs_rebuild() {
+    local target=$1; shift
+    [ ! -f "$target" ] && return 0
+    for src in "$@"; do
+        [ "$src" -nt "$target" ] && return 0
+    done
+    return 1
+}
+
+if needs_rebuild "$LIBPVA" $LIBPVA_SOURCES "$PVA_HEADER" "$ROOT/pva_utils.h" "$LIBCENTROLIGN"; then
+    echo "Building libpva.so..."
+    g++ -O2 -std=c++17 -fPIC -shared \
+        -I"$CENTROLIGN_INC" \
+        -o "$LIBPVA" \
+        $LIBPVA_SOURCES \
+        -L"$CENTROLIGN_BUILD" -lcentrolign \
+        -Wl,-rpath,"$CENTROLIGN_BUILD"
+    echo "OK: libpva.so built"
+else
+    echo "OK: libpva.so up to date"
+fi
+
+if needs_rebuild "$PVA_BIN" \
+       "$ROOT/pva_main.cpp" "$ROOT/pva_trace_haplotypes.cpp" "$PVA_HEADER" "$ROOT/pva_utils.h" "$LIBPVA"; then
+    echo "Building pva binary..."
+    g++ -O2 -std=c++17 -fopenmp \
+        -I"$BIN/gbwtgraph/include" \
+        -I"$BIN/gbwt/include" \
+        -I"$BIN/sdsl-lite/include" \
+        -o "$PVA_BIN" \
+        "$ROOT/pva_main.cpp" \
+        "$ROOT/pva_trace_haplotypes.cpp" \
+        -L"$BIN" -lpva \
+        -Wl,-rpath,"$BIN" \
+        -Wl,-rpath,"$CENTROLIGN_BUILD" \
+        "$BIN/gbwtgraph/lib/libgbwtgraph.a" \
+        "$BIN/sdsl-lite/lib/libgbwt.a" \
+        "$BIN/sdsl-lite/lib/libhandlegraph.a" \
+        "$BIN/sdsl-lite/lib/libsdsl.a" \
+        -lcrypto -lzstd -lz -ldivsufsort -ldivsufsort64 -fopenmp
+    echo "OK: pva built"
+else
+    echo "OK: pva up to date"
+fi
+
+# ── 9. tests ─────────────────────────────────────────────────────────────────
+echo ""
+echo "--- tests ---"
+TEST_UNIT="$ROOT/tests/unit/test_unit"
+if needs_rebuild "$TEST_UNIT" "$ROOT/tests/unit/test_unit.cpp" "$ROOT/pva_utils.h"; then
+    echo "Building unit tests..."
+    g++ -O0 -g -std=c++17 \
+        -I"$ROOT" \
+        -o "$TEST_UNIT" \
+        "$ROOT/tests/unit/test_unit.cpp"
+    echo "OK: unit tests built"
+else
+    echo "OK: unit tests up to date"
+fi
+
+echo "Running unit tests..."
+"$TEST_UNIT"
+
+chmod +x "$ROOT/tests/test_pva.sh"
+echo "OK: integration test script ready (run: tests/test_pva.sh)"
 
 # ── done ──────────────────────────────────────────────────────────────────────
 echo ""
@@ -220,6 +269,10 @@ echo "Binaries available in bin/:"
 echo "  bin/vg"
 echo "  bin/gbz-base/target/release/gbz2db"
 echo "  bin/gbz-base/target/release/query"
-echo "  bin/filter_paths"
-echo "  bin/trace_haplotypes"
 echo "  bin/centrolign"
+echo "  bin/pva  (+ bin/libpva.so)"
+echo ""
+echo "Tests:"
+echo "  tests/unit/test_unit       (unit tests — run automatically above)"
+echo "  tests/test_pva.sh          (integration tests — run manually)"
+echo "  TEST_DATA_DIR=<path> tests/test_pva.sh  (with real graph data)"
