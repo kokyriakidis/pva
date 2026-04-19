@@ -246,7 +246,6 @@ if needs_rebuild "$PVA_BIN" \
     echo "Building pva binary..."
     g++ -O2 -std=c++17 -fopenmp \
         -I"$BIN/gbwtgraph/include" \
-        -I"$BIN/gbwt/include" \
         -I"$BIN/sdsl-lite/include" \
         -o "$PVA_BIN" \
         "$ROOT/pva_main.cpp" \
@@ -265,14 +264,19 @@ else
 fi
 
 # ── cleanup: remove build-time-only sources now that pva is compiled ─────────
-# gbwt: .a statically linked; keep only include/ for potential pva rebuilds
-find "$BIN/gbwt" -mindepth 1 -maxdepth 1 ! -name "include" -exec rm -rf {} +
+# gbwt: headers copied to sdsl-lite/include; .a statically linked — remove entirely
+rm -rf "$BIN/gbwt"
 # gbwtgraph: .a statically linked; keep include/ and lib/ for potential pva rebuilds
 find "$BIN/gbwtgraph" -mindepth 1 -maxdepth 1 \
     ! -name "include" ! -name "lib" -exec rm -rf {} +
-# sdsl-lite source tree no longer needed (keep include/ and lib/ which are inside it)
+# sdsl-lite: keep only include/ and lib/
 find "$BIN/sdsl-lite" -mindepth 1 -maxdepth 1 \
     ! -name "include" ! -name "lib" -exec rm -rf {} +
+# centrolign-src: keep only include/ (pva rebuild) and build/libcentrolign.so (runtime)
+find "$BIN/centrolign-src" -mindepth 1 -maxdepth 1 \
+    ! -name "include" ! -name "build" -exec rm -rf {} +
+# gbz-base: keep only the two release binaries
+find "$BIN/gbz-base" -mindepth 1 -maxdepth 1 ! -name "target" -exec rm -rf {} +
 
 # ── 9. tests ─────────────────────────────────────────────────────────────────
 echo ""
