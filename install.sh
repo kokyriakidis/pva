@@ -187,14 +187,21 @@ else
     echo "OK: centrolign built (binary + libcentrolign.so)"
 fi
 
-# ── 7. Python dependencies ────────────────────────────────────────────────────
+# ── 7. Python virtual environment + dependencies ─────────────────────────────
 echo ""
-echo "--- Python dependencies (scikit-bio) ---"
-if python3 -c "import skbio" &>/dev/null 2>&1; then
-    echo "OK: scikit-bio already installed"
+echo "--- Python venv (scikit-bio) ---"
+VENV="$ROOT/venv"
+VENV_PYTHON="$VENV/bin/python3"
+VENV_PIP="$VENV/bin/pip"
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "Creating Python venv at venv/..."
+    python3 -m venv "$VENV"
+fi
+if "$VENV_PYTHON" -c "import skbio" &>/dev/null 2>&1; then
+    echo "OK: scikit-bio already installed in venv"
 else
-    echo "Installing scikit-bio..."
-    pip install --break-system-packages scikit-bio
+    echo "Installing scikit-bio into venv..."
+    "$VENV_PIP" install --upgrade pip scikit-bio
     echo "OK: scikit-bio installed"
 fi
 
@@ -244,7 +251,7 @@ if needs_rebuild "$PVA_BIN" \
         -o "$PVA_BIN" \
         "$ROOT/pva_main.cpp" \
         "$ROOT/pva_trace_haplotypes.cpp" \
-        -L"$BIN" -lpva \
+        -L"$BIN" -L"$BIN/sdsl-lite/lib" -lpva \
         -Wl,-rpath,"$BIN" \
         -Wl,-rpath,"$CENTROLIGN_BUILD" \
         "$BIN/gbwtgraph/lib/libgbwtgraph.a" \

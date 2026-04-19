@@ -24,20 +24,34 @@
 
 namespace pva {
 
+static std::string bin_dir() {
+    char self[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", self, sizeof(self) - 1);
+    if (len <= 0) return {};
+    self[len] = '\0';
+    std::string path(self);
+    auto slash = path.rfind('/');
+    return slash != std::string::npos ? path.substr(0, slash) : std::string{};
+}
+
+static std::string find_python() {
+    std::string dir = bin_dir();
+    if (!dir.empty()) {
+        std::string venv_py = dir + "/../venv/bin/python3";
+        if (access(venv_py.c_str(), X_OK) == 0)
+            return venv_py;
+    }
+    return "python3";
+}
+
 static std::string find_infer_tree_script(const std::string& hint) {
     if (!hint.empty()) return hint;
 
-    char self[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", self, sizeof(self) - 1);
-    if (len > 0) {
-        self[len] = '\0';
-        std::string dir(self);
-        auto slash = dir.rfind('/');
-        if (slash != std::string::npos) {
-            std::string candidate = dir.substr(0, slash) + "/../scripts/infer_tree.py";
-            if (access(candidate.c_str(), R_OK) == 0)
-                return candidate;
-        }
+    std::string dir = bin_dir();
+    if (!dir.empty()) {
+        std::string candidate = dir + "/../scripts/infer_tree.py";
+        if (access(candidate.c_str(), R_OK) == 0)
+            return candidate;
     }
     return "scripts/infer_tree.py";
 }
@@ -50,7 +64,7 @@ int infer_guide_tree(const std::string& cigar_dir,
                const std::string& script_hint)
 {
     std::string script = find_infer_tree_script(script_hint);
-    std::vector<std::string> args = {"python3", script, cigar_dir, combinations};
+    std::vector<std::string> args = {find_python(), script, cigar_dir, combinations};
 
     if (out_path.empty() || out_path == "-") {
         // Let stdout flow through to the terminal / caller's stdout

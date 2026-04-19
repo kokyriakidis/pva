@@ -205,7 +205,7 @@ static void test_safe_name() {
          "safe_name: # replaced with _");
     test(safe_name_ref("sample.hap-1") == "sample.hap-1",
          "safe_name: . and - preserved");
-    test(safe_name_ref("CHM13 v2.0") == "CHM13_v2_0",
+    test(safe_name_ref("CHM13 v2.0") == "CHM13_v2.0",
          "safe_name: spaces and dots handled");
     test(safe_name_ref("abc123") == "abc123",
          "safe_name: alphanumeric unchanged");
