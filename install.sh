@@ -16,6 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BIN="$ROOT/bin"
+mkdir -p "$BIN"
 
 echo "=== Pipeline installation ==="
 echo "Root: $ROOT"
