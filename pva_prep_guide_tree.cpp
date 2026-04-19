@@ -80,7 +80,7 @@ static int split_fasta(const std::vector<FastaEntry>& entries,
             std::cerr << "pva guide-tree: cannot write " << path << "\n";
             return 1;
         }
-        out << ">" << e.label << "\n" << e.sequence << "\n";
+        out << ">" << safe_name(e.label) << "\n" << e.sequence << "\n";
     }
     return 0;
 }
