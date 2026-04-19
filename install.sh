@@ -71,6 +71,7 @@ else
           -DCMAKE_BUILD_TYPE=Release
     cmake --build "$BIN/sdsl-lite/build" --parallel "$(nproc)"
     cmake --install "$BIN/sdsl-lite/build"
+    rm -rf "$BIN/sdsl-lite/build"
     echo "OK: sdsl-lite built"
 fi
 
@@ -91,6 +92,7 @@ else
           -DCMAKE_INSTALL_PREFIX="$BIN/sdsl-lite"
     cmake --build "$BIN/handlegraph/build" --parallel "$(nproc)"
     cmake --install "$BIN/handlegraph/build"
+    rm -rf "$BIN/handlegraph"
     echo "OK: libhandlegraph built and installed into sdsl-lite prefix"
 fi
 
@@ -151,6 +153,10 @@ else
     fi
     echo "Building gbz-base..."
     cargo build --release --manifest-path "$BIN/gbz-base/Cargo.toml"
+    # Rust target/ can be several GB — keep only the two release binaries
+    find "$BIN/gbz-base/target" -mindepth 1 -maxdepth 1 ! -name "release" -exec rm -rf {} +
+    find "$BIN/gbz-base/target/release" -mindepth 1 -maxdepth 1 \
+        ! -name "gbz2db" ! -name "query" -exec rm -rf {} +
     echo "OK: gbz-base built"
 fi
 
@@ -175,6 +181,9 @@ else
           -DBUILD_SHARED_LIBS=ON
     cmake --build "$CENTROLIGN_BUILD" --parallel "$(nproc)"
     cp "$CENTROLIGN_BUILD/centrolign" "$BIN/centrolign"
+    # Remove cmake intermediates; keep libcentrolign.so (runtime) and include/ (pva compile)
+    find "$CENTROLIGN_BUILD" -mindepth 1 -maxdepth 1 \
+        ! -name "libcentrolign.so" ! -name "centrolign" -exec rm -rf {} +
     echo "OK: centrolign built (binary + libcentrolign.so)"
 fi
 
@@ -247,6 +256,16 @@ if needs_rebuild "$PVA_BIN" \
 else
     echo "OK: pva up to date"
 fi
+
+# ── cleanup: remove build-time-only sources now that pva is compiled ─────────
+# gbwt: .a statically linked; keep only include/ for potential pva rebuilds
+find "$BIN/gbwt" -mindepth 1 -maxdepth 1 ! -name "include" -exec rm -rf {} +
+# gbwtgraph: .a statically linked; keep include/ and lib/ for potential pva rebuilds
+find "$BIN/gbwtgraph" -mindepth 1 -maxdepth 1 \
+    ! -name "include" ! -name "lib" -exec rm -rf {} +
+# sdsl-lite source tree no longer needed (keep include/ and lib/ which are inside it)
+find "$BIN/sdsl-lite" -mindepth 1 -maxdepth 1 \
+    ! -name "include" ! -name "lib" -exec rm -rf {} +
 
 # ── 9. tests ─────────────────────────────────────────────────────────────────
 echo ""
