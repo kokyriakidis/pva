@@ -138,6 +138,13 @@ if [ -x "$BIN/gbz-base/target/release/gbz2db" ] && \
    [ -x "$BIN/gbz-base/target/release/query" ]; then
     echo "OK: gbz-base already built"
 else
+    # Ensure Rust >= 1.85 (edition 2024 requirement) — installs to $HOME, no sudo needed
+    if ! command -v cargo &>/dev/null || \
+       ! cargo --version 2>/dev/null | awk '{split($2,v,"."); exit !(v[1]>1 || (v[1]==1 && v[2]>=85))}'; then
+        echo "Rust < 1.85 or not found — installing via rustup (no sudo required)..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+        source "$HOME/.cargo/env"
+    fi
     if [ ! -d "$BIN/gbz-base" ]; then
         echo "Cloning gbz-base..."
         git clone https://github.com/jltsiren/gbz-base "$BIN/gbz-base"
